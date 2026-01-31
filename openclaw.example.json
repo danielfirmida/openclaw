@@ -1,0 +1,91 @@
+{
+  "$schema": "https://docs.openclaw.ai/schema/openclaw.json",
+
+  "gateway": {
+    "bind": "loopback",
+    "port": 18789,
+    "auth": {
+      "mode": "token",
+      "allowTailscale": true
+    },
+    "tailscale": {
+      "mode": "serve"
+    },
+    "discovery": {
+      "mdns": {
+        "mode": "off"
+      }
+    }
+  },
+
+  "agents": {
+    "default": "main",
+    "defaults": {
+      "model": {
+        "primary": "anthropic/claude-opus-4-5",
+        "fallback": ["anthropic/claude-sonnet-4"]
+      },
+      "sandbox": {
+        "mode": "all",
+        "scope": "session",
+        "workspaceAccess": "rw",
+        "network": "none",
+        "readOnlyRoot": true,
+        "memory": "1g",
+        "memorySwap": "2g",
+        "cpus": 1,
+        "pidsLimit": 256
+      },
+      "tools": {
+        "deny": []
+      },
+      "contextPruning": {
+        "mode": "soft-trim"
+      }
+    },
+    "list": [
+      {
+        "id": "main",
+        "identity": {
+          "name": "OpenClaw",
+          "emoji": "🦞"
+        },
+        "default": true,
+        "sandbox": {
+          "mode": "off"
+        }
+      }
+    ]
+  },
+
+  "channels": {
+    "whatsapp": {
+      "enabled": false,
+      "dmPolicy": "pairing",
+      "groups": {
+        "*": {
+          "requireMention": true
+        }
+      }
+    },
+    "telegram": {
+      "enabled": false,
+      "dmPolicy": "pairing"
+    },
+    "discord": {
+      "enabled": false,
+      "dm": {
+        "policy": "pairing"
+      }
+    }
+  },
+
+  "logging": {
+    "redactSensitive": "tools",
+    "level": "info"
+  },
+
+  "env": {
+    "load": [".env"]
+  }
+}
