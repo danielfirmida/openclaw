@@ -13,20 +13,7 @@ jobs:
     # Fallback to GITHUB_TOKEN when the GH app key is not configured.
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/create-github-app-token@v1
-        id: app-token
-        if: ${{ secrets.GH_APP_PRIVATE_KEY }}
-        with:
-          app-id: "2729701"
-          private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
       - uses: actions/labeler@v5
-        if: ${{ steps.app-token.outputs.token }}
-        with:
-          configuration-path: .github/labeler.yml
-          repo-token: ${{ steps.app-token.outputs.token }}
-          sync-labels: true
-      - uses: actions/labeler@v5
-        if: ${{ !steps.app-token.outputs.token }}
         with:
           configuration-path: .github/labeler.yml
           repo-token: ${{ github.token }}
