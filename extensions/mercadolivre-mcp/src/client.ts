@@ -236,11 +236,14 @@ export function createTokenManager(config: MercadoLivreConfig) {
         return tokenState.access;
       }
 
+      // Capture refresh token before async operation to avoid race conditions
+      const currentRefreshToken = tokenState.refresh;
+
       // Deduplicate concurrent refresh requests
       if (!refreshPromise) {
         refreshPromise = (async () => {
           try {
-            const newToken = await refreshToken(config, tokenState!.refresh);
+            const newToken = await refreshToken(config, currentRefreshToken);
             tokenState = newToken;
             return newToken.access;
           } finally {

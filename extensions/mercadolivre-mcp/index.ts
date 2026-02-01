@@ -18,16 +18,11 @@ export default function register(api: OpenClawPluginApi) {
   const config = configResult.data;
   const tokenManager = createTokenManager(config);
 
-  // Track user ID after authentication
+  // Track user ID after authentication (set during OAuth flow)
   let userId: number | null = null;
 
   // Helper to get user ID
   const getUserId = () => userId;
-
-  // Helper to set user ID after user info is fetched
-  const setUserId = (id: number) => {
-    userId = id;
-  };
 
   // Register OAuth provider for authentication
   api.registerProvider({
@@ -108,27 +103,11 @@ export default function register(api: OpenClawPluginApi) {
     ],
   });
 
-  // Wrap getToken to also track userId from user info responses
-  const wrappedGetUserInfoTool = () => {
-    const baseTool = createGetUserInfoTool(tokenManager.getToken.bind(tokenManager));
-    return {
-      ...baseTool,
-      async execute(...args: Parameters<typeof baseTool.execute>) {
-        const result = await baseTool.execute(...args);
-        // Extract user ID from successful response
-        if (result.structuredContent && typeof result.structuredContent === "object") {
-          const content = result.structuredContent as Record<string, unknown>;
-          if (typeof content.id === "number") {
-            setUserId(content.id);
-          }
-        }
-        return result;
-      },
-    };
-  };
-
   // Register read-only tools
-  api.registerTool(wrappedGetUserInfoTool(), { optional: true });
+  // Note: userId is already captured during OAuth flow (line 85), so no need to re-extract
+  api.registerTool(createGetUserInfoTool(tokenManager.getToken.bind(tokenManager)), {
+    optional: true,
+  });
   api.registerTool(createListOrdersTool(tokenManager.getToken.bind(tokenManager), getUserId), {
     optional: true,
   });

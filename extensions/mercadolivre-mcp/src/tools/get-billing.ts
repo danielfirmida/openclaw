@@ -4,6 +4,8 @@ import { z } from "zod";
 import { fetchMercadoLivre, MercadoLivreApiError } from "../client.js";
 
 // Billing periods response schema
+// Note: These schemas differ from types.ts because the actual API response structure
+// uses different property names (e.g., 'results' vs 'details' array)
 const BillingPeriodsResponseSchema = z.object({
   periods: z.array(
     z.object({
@@ -55,7 +57,7 @@ export function createGetBillingTool(getToken: () => Promise<string>, getUserId:
         }),
       ),
       group: Type.Optional(
-        Type.String({
+        Type.Union([Type.Literal("ML"), Type.Literal("MP")], {
           description: "Billing group: ML (Mercado Livre) or MP (Mercado Pago). Default: ML",
         }),
       ),
