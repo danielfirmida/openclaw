@@ -1,0 +1,11 @@
+{
+  "name": "@openclaw/mercadopago-mcp",
+  "version": "2026.1.31",
+  "type": "module",
+  "description": "MercadoPago CFO - Cashflow tracking and financial analysis via MercadoPago API",
+  "openclaw": {
+    "extensions": [
+      "./index.ts"
+    ]
+  }
+}
