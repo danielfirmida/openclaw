@@ -1,0 +1,21 @@
+{
+  "id": "mercadopago-mcp",
+  "name": "MercadoPago CFO",
+  "description": "Cashflow tracking and financial analysis via MercadoPago API",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "accessToken": {
+        "type": "string",
+        "description": "MercadoPago API access token"
+      },
+      "environment": {
+        "type": "string",
+        "enum": ["sandbox", "production"],
+        "default": "production"
+      }
+    },
+    "required": ["accessToken"]
+  }
+}
