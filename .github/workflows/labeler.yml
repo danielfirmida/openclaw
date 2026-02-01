@@ -15,7 +15,7 @@ jobs:
     steps:
       - uses: actions/create-github-app-token@v1
         id: app-token
-        if: ${{ secrets.GH_APP_PRIVATE_KEY != '' }}
+        if: ${{ secrets.GH_APP_PRIVATE_KEY }}
         with:
           app-id: "2729701"
           private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
