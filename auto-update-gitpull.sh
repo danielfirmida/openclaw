@@ -34,6 +34,16 @@ log "Updates available: ${LOCAL:0:7} -> ${REMOTE:0:7}"
 log "Pulling changes..."
 git pull origin main
 
+# Install extension dependencies
+log "Installing extension dependencies..."
+for ext in extensions/*/package.json; do
+  ext_dir=$(dirname "$ext")
+  if [ -f "$ext_dir/package.json" ]; then
+    log "  Installing deps for $(basename "$ext_dir")..."
+    (cd "$ext_dir" && npm install --omit=dev 2>/dev/null || true)
+  fi
+done
+
 # Rebuild image
 log "Building new image..."
 docker compose build
