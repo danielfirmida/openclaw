@@ -372,6 +372,15 @@ importers:
         specifier: ^6.16.0
         version: 6.16.0(ws@8.19.0)(zod@4.3.6)
 
+  extensions/mercadopago-mcp:
+    dependencies:
+      '@sinclair/typebox':
+        specifier: 0.34.47
+        version: 0.34.47
+      zod:
+        specifier: ^4.3.6
+        version: 4.3.6
+
   extensions/msteams:
     dependencies:
       '@microsoft/agents-hosting':
