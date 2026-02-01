@@ -1,0 +1,13 @@
+{
+  "id": "btg-pactual",
+  "name": "BTG Pactual Banking",
+  "description": "BTG Pactual business banking tools and OAuth support",
+  "providers": [
+    "btg-pactual"
+  ],
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  }
+}
