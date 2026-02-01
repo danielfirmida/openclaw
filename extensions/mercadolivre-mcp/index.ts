@@ -45,8 +45,12 @@ export default function register(api: OpenClawPluginApi) {
             `Open this URL in your browser:\n\n${url}\n\nAfter authorizing, you'll be redirected. Copy the full redirect URL and paste it below.`,
           );
 
-          // Open URL if possible
-          await ctx.openUrl(url);
+          // Open URL if possible (ignore failures on headless/VPS)
+          try {
+            await ctx.openUrl(url);
+          } catch {
+            // no-op: user can open the URL manually
+          }
 
           // Get redirect URL from user (VPS compatible)
           const redirectUrl = await ctx.prompter.text(
@@ -84,12 +88,12 @@ export default function register(api: OpenClawPluginApi) {
               {
                 profileId: `mercadolivre-${tokenState.userId}`,
                 credential: {
-                  kind: "oauth",
-                  accessToken: tokenState.access,
-                  refreshToken: tokenState.refresh,
-                  expiresAt: tokenState.expires,
-                  scopes: ["read", "offline_access"],
-                } as const,
+                  type: "oauth",
+                  provider: "mercadolivre",
+                  access: tokenState.access,
+                  refresh: tokenState.refresh,
+                  expires: tokenState.expires,
+                },
               },
             ],
             notes: [

@@ -92,6 +92,7 @@ export function createAuthorizationUrl(
     state,
     code_challenge: codeChallenge,
     code_challenge_method: "S256",
+    scope: "read offline_access",
   });
 
   return {
@@ -307,6 +308,28 @@ export async function fetchMercadoLivre<T>(
         }
 
         return parsed.data;
+      } catch (err) {
+        // Map network/timeout errors to MercadoLivreApiError for retry
+        if (err instanceof MercadoLivreApiError) {
+          throw err;
+        }
+        if (err instanceof Error && err.name === "AbortError") {
+          throw new MercadoLivreApiError(
+            "Mercado Livre API request timed out",
+            504,
+            undefined,
+            "Retry shortly.",
+          );
+        }
+        if (err instanceof TypeError) {
+          throw new MercadoLivreApiError(
+            "Mercado Livre API network error",
+            503,
+            undefined,
+            "Check connectivity and retry.",
+          );
+        }
+        throw err;
       } finally {
         clearTimeout(timeout);
       }

@@ -1,7 +1,16 @@
 import { Type } from "@sinclair/typebox";
+import { z } from "zod";
 
 import { fetchMercadoLivre, MercadoLivreApiError } from "../client.js";
 import { ItemsSearchResponseSchema, ItemSchema } from "../types.js";
+
+// Mercado Livre multi-get endpoint returns wrapped responses
+const ItemsBatchResponseSchema = z.array(
+  z.object({
+    code: z.number(),
+    body: ItemSchema.optional(),
+  }),
+);
 
 export function createListItemsTool(getToken: () => Promise<string>, getUserId: () => number | null) {
   return {
@@ -116,14 +125,20 @@ export function createListItemsTool(getToken: () => Promise<string>, getUserId: 
           const batchIds = itemIds.slice(i, i + batchSize);
           const idsParam = batchIds.join(",");
 
-          // Multi-get endpoint
+          // Multi-get endpoint returns wrapped responses: [{code, body}, ...]
           const batchResponse = await fetchMercadoLivre(
             `/items?ids=${idsParam}`,
             token,
-            ItemSchema.array(),
+            ItemsBatchResponseSchema,
           );
 
-          items.push(...batchResponse);
+          // Extract successful items (code 200) and handle errors
+          for (const wrapper of batchResponse) {
+            if (wrapper.code === 200 && wrapper.body) {
+              items.push(wrapper.body);
+            }
+            // Skip non-200 responses (deleted items, etc.) - they are expected
+          }
         }
 
         // Calculate totals

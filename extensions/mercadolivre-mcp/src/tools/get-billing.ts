@@ -165,8 +165,9 @@ export function createGetBillingTool(getToken: () => Promise<string>, getUserId:
         const periods = periodsResponse.periods;
 
         // Group periods by year/month
+        const summaryLimit = Math.min(limit, periods.length);
         const periodsSummary = periods
-          .slice(0, 12)
+          .slice(0, summaryLimit)
           .map(
             (p) =>
               `  ${p.year}-${String(p.month).padStart(2, "0")} | ${p.group} | ${p.status} | ${p.currency_id || "BRL"} ${(p.total || 0).toFixed(2)} | key: ${p.key}`,
@@ -187,6 +188,7 @@ export function createGetBillingTool(getToken: () => Promise<string>, getUserId:
               text:
                 `Available Billing Periods (${periods.length}):\n` +
                 periodsSummary +
+                (periods.length > summaryLimit ? `\n  ... and ${periods.length - summaryLimit} more` : "") +
                 `\n\nTotals by Group:\n` +
                 Array.from(totalByGroup.entries())
                   .map(([g, t]) => `  ${g}: BRL ${t.toFixed(2)}`)

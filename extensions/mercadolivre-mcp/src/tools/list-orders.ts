@@ -137,8 +137,8 @@ export function createListOrdersTool(getToken: () => Promise<string>, getUserId:
         const orders = response.results;
         const paging = response.paging;
 
-        // Calculate totals
-        const totalAmount = orders.reduce((sum, o) => sum + o.total_amount, 0);
+        // Calculate page totals (not overall totals)
+        const pageTotal = orders.reduce((sum, o) => sum + o.total_amount, 0);
         const currencies = [...new Set(orders.map((o) => o.currency_id))];
 
         const ordersSummary = orders
@@ -157,14 +157,14 @@ export function createListOrdersTool(getToken: () => Promise<string>, getUserId:
                 `Found ${orders.length} orders (${paging.total} total):\n` +
                 ordersSummary +
                 (orders.length > 10 ? `\n  ... and ${orders.length - 10} more` : "") +
-                `\n\nTotal: ${currencies[0] || "BRL"} ${totalAmount.toFixed(2)}`,
+                `\n\nPage Total: ${currencies[0] || "BRL"} ${pageTotal.toFixed(2)}`,
             },
           ],
           structuredContent: {
             orders,
             count: orders.length,
             total_available: paging.total,
-            total_amount: totalAmount,
+            page_total: pageTotal,
             currency: currencies[0] || "BRL",
             pagination: {
               limit: paging.limit,
