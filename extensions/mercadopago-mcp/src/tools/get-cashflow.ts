@@ -1,17 +1,38 @@
 import { Type } from "@sinclair/typebox";
+import { z } from "zod";
 
-import { fetchMercadoPago, fetchMercadoPagoRaw, MercadoPagoApiError } from "../client.js";
-import { aggregateCashflow } from "../csv-parser.js";
-import { ReportResponseSchema, type MercadoPagoConfig } from "../types.js";
+import { fetchMercadoPago, MercadoPagoApiError } from "../client.js";
+import type { MercadoPagoConfig } from "../types.js";
 
 // Date validation
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+
+// Schema for payments search API response
+const PaymentsSearchResponseSchema = z.object({
+  results: z.array(
+    z.object({
+      id: z.number(),
+      date_approved: z.string().nullable(),
+      date_created: z.string(),
+      operation_type: z.string(),
+      transaction_amount: z.number(),
+      currency_id: z.string(),
+      status: z.string(),
+      fee_details: z.array(z.object({ amount: z.number() })).optional(),
+    }),
+  ),
+  paging: z.object({
+    total: z.number(),
+    limit: z.number(),
+    offset: z.number(),
+  }),
+});
 
 export function createGetCashflowTool(config: MercadoPagoConfig) {
   return {
     name: "mercadopago_get_cashflow",
     description:
-      "Get cashflow summary (money in/out) for a date range. Generates a report and returns aggregated inflows and outflows.",
+      "Get cashflow summary (money in/out) for a date range. Aggregates payments to show total inflows and outflows.",
     parameters: Type.Object({
       start_date: Type.String({
         description: "Start date (YYYY-MM-DD)",
@@ -39,81 +60,87 @@ export function createGetCashflowTool(config: MercadoPagoConfig) {
       }
 
       try {
-        // Step 1: Generate report
-        const report = await fetchMercadoPago(
-          "/v1/account/release_report",
-          config.accessToken,
-          ReportResponseSchema,
-          {
-            method: "POST",
-            body: {
-              begin_date: `${start_date}T00:00:00Z`,
-              end_date: `${end_date}T23:59:59Z`,
-            },
-          },
-        );
+        // Fetch all approved payments in the period using pagination
+        let totalInflow = 0;
+        let totalOutflow = 0;
+        let totalFees = 0;
+        let transactionCount = 0;
+        let offset = 0;
+        const limit = 100;
+        let currency = "BRL";
 
-        // Step 2: Poll for report with exponential backoff
-        const maxAttempts = 12;
-        let delay = 5000; // Start at 5 seconds
+        // Paginate through all results
+        while (true) {
+          const queryParams = new URLSearchParams({
+            status: "approved",
+            limit: String(limit),
+            offset: String(offset),
+            sort: "date_created",
+            criteria: "desc",
+            range: "date_created",
+            begin_date: `${start_date}T00:00:00Z`,
+            end_date: `${end_date}T23:59:59Z`,
+          });
 
-        for (let attempt = 0; attempt < maxAttempts; attempt++) {
-          await new Promise((r) => setTimeout(r, delay));
+          const response = await fetchMercadoPago(
+            `/v1/payments/search?${queryParams.toString()}`,
+            config.accessToken,
+            PaymentsSearchResponseSchema,
+          );
 
-          try {
-            const csv = await fetchMercadoPagoRaw(
-              `/v1/account/release_report/${report.file_name}`,
-              config.accessToken,
-            );
+          for (const payment of response.results) {
+            currency = payment.currency_id;
+            const fees = payment.fee_details?.reduce((sum, f) => sum + f.amount, 0) ?? 0;
+            totalFees += fees;
 
-            // Step 3: Parse and aggregate with streaming
-            const { totalInflow, totalOutflow, transactionCount } = aggregateCashflow(csv);
-
-            const output = {
-              period: { start_date, end_date },
-              total_inflow: totalInflow,
-              total_outflow: totalOutflow,
-              net_change: totalInflow - totalOutflow,
-              transaction_count: transactionCount,
-            };
-
-            return {
-              content: [
-                {
-                  type: "text" as const,
-                  text:
-                    `Cashflow ${start_date} to ${end_date}:\n` +
-                    `  Money In:  ${output.total_inflow.toFixed(2)}\n` +
-                    `  Money Out: ${output.total_outflow.toFixed(2)}\n` +
-                    `  Net:       ${output.net_change.toFixed(2)}\n` +
-                    `  Transactions: ${output.transaction_count}`,
-                },
-              ],
-              structuredContent: output,
-            };
-          } catch (error) {
-            if (error instanceof MercadoPagoApiError && error.status === 404) {
-              // Report not ready, continue polling with backoff
-              delay = Math.min(delay * 1.5, 30000); // Max 30 seconds
-              continue;
+            // Inflows: payments received (positive amounts)
+            // Outflows: refunds (negative amounts) or operation_type indicates refund
+            if (payment.transaction_amount >= 0 && payment.operation_type !== "refund") {
+              totalInflow += payment.transaction_amount;
+            } else {
+              totalOutflow += Math.abs(payment.transaction_amount);
             }
-            throw error;
+            transactionCount++;
+          }
+
+          // Check if we've fetched all results
+          if (response.results.length < limit || offset + limit >= response.paging.total) {
+            break;
+          }
+          offset += limit;
+
+          // Safety limit: max 10 pages (1000 transactions)
+          if (offset >= 1000) {
+            break;
           }
         }
 
-        // Timeout after max attempts
+        const output = {
+          period: { start_date, end_date },
+          total_inflow: totalInflow,
+          total_outflow: totalOutflow,
+          total_fees: totalFees,
+          net_change: totalInflow - totalOutflow - totalFees,
+          gross_net_change: totalInflow - totalOutflow,
+          transaction_count: transactionCount,
+          currency,
+        };
+
         return {
           content: [
             {
               type: "text" as const,
-              text: `Report generation timed out. Report ID: ${report.file_name}. Try again later.`,
+              text:
+                `Cashflow ${start_date} to ${end_date} (${currency}):\n` +
+                `  Money In:     ${output.total_inflow.toFixed(2)}\n` +
+                `  Money Out:    ${output.total_outflow.toFixed(2)}\n` +
+                `  Fees:         ${output.total_fees.toFixed(2)}\n` +
+                `  Net (gross):  ${output.gross_net_change.toFixed(2)}\n` +
+                `  Net (after fees): ${output.net_change.toFixed(2)}\n` +
+                `  Transactions: ${output.transaction_count}`,
             },
           ],
-          structuredContent: {
-            status: "timeout",
-            report_id: report.file_name,
-            hint: "Report is still processing. Try again in a few minutes.",
-          },
+          structuredContent: output,
         };
       } catch (error) {
         if (error instanceof MercadoPagoApiError) {

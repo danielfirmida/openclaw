@@ -1,8 +1,35 @@
 import { Type } from "@sinclair/typebox";
+import { z } from "zod";
 
-import { fetchMercadoPago, fetchMercadoPagoRaw, MercadoPagoApiError } from "../client.js";
-import { parseCSVStream } from "../csv-parser.js";
-import { ReportResponseSchema, type MercadoPagoConfig, type Transaction } from "../types.js";
+import { fetchMercadoPago, MercadoPagoApiError } from "../client.js";
+import type { MercadoPagoConfig, Transaction } from "../types.js";
+
+// Schema for payments search API response
+const PaymentsSearchResponseSchema = z.object({
+  results: z.array(
+    z.object({
+      id: z.number(),
+      date_created: z.string(),
+      date_approved: z.string().nullable(),
+      operation_type: z.string(),
+      description: z.string().nullable(),
+      transaction_amount: z.number(),
+      currency_id: z.string(),
+      status: z.string(),
+      status_detail: z.string().nullable(),
+      fee_details: z.array(z.object({ amount: z.number() })).optional(),
+      payer: z.object({
+        email: z.string().nullable().optional(),
+        id: z.string().nullable().optional(),
+      }).optional(),
+    }),
+  ),
+  paging: z.object({
+    total: z.number(),
+    limit: z.number(),
+    offset: z.number(),
+  }),
+});
 
 export function createListTransactionsTool(config: MercadoPagoConfig) {
   return {
@@ -28,6 +55,11 @@ export function createListTransactionsTool(config: MercadoPagoConfig) {
           pattern: "^\\d{4}-\\d{2}-\\d{2}$",
         }),
       ),
+      status: Type.Optional(
+        Type.String({
+          description: "Filter by status (approved, pending, rejected, etc.)",
+        }),
+      ),
     }),
 
     async execute(
@@ -36,12 +68,19 @@ export function createListTransactionsTool(config: MercadoPagoConfig) {
         limit?: number;
         date_from?: string;
         date_to?: string;
+        status?: string;
       },
     ) {
-      const { limit = 10, date_from, date_to } = params;
+      const { limit = 10, date_from, date_to, status } = params;
 
       try {
-        // Use last 7 days if no dates specified
+        // Build query params for payments search
+        const queryParams = new URLSearchParams();
+        queryParams.set("limit", String(Math.min(limit, 100)));
+        queryParams.set("sort", "date_created");
+        queryParams.set("criteria", "desc");
+
+        // Date range (default to last 7 days if not specified)
         const endDate = date_to || new Date().toISOString().split("T")[0];
         const startDate =
           date_from ||
@@ -51,89 +90,57 @@ export function createListTransactionsTool(config: MercadoPagoConfig) {
             return d.toISOString().split("T")[0];
           })();
 
-        // Generate a report for the date range
-        const report = await fetchMercadoPago(
-          "/v1/account/release_report",
+        queryParams.set("range", "date_created");
+        queryParams.set("begin_date", `${startDate}T00:00:00Z`);
+        queryParams.set("end_date", `${endDate}T23:59:59Z`);
+
+        if (status) {
+          queryParams.set("status", status);
+        }
+
+        // Use payments search API - more reliable than reports
+        const response = await fetchMercadoPago(
+          `/v1/payments/search?${queryParams.toString()}`,
           config.accessToken,
-          ReportResponseSchema,
-          {
-            method: "POST",
-            body: {
-              begin_date: `${startDate}T00:00:00Z`,
-              end_date: `${endDate}T23:59:59Z`,
-            },
-          },
+          PaymentsSearchResponseSchema,
         );
 
-        // Poll for report with exponential backoff
-        const maxAttempts = 12;
-        let delay = 5000;
+        // Convert to Transaction format
+        const transactions: Transaction[] = response.results.map((payment) => {
+          const feeAmount = payment.fee_details?.reduce((sum, f) => sum + f.amount, 0) ?? 0;
+          return {
+            id: String(payment.id),
+            date: payment.date_approved || payment.date_created,
+            type: payment.operation_type,
+            description: payment.description || payment.status_detail || payment.status,
+            gross_amount: payment.transaction_amount,
+            net_amount: payment.transaction_amount - feeAmount,
+            fee_amount: feeAmount,
+            currency: payment.currency_id,
+          };
+        });
 
-        for (let attempt = 0; attempt < maxAttempts; attempt++) {
-          await new Promise((r) => setTimeout(r, delay));
-
-          try {
-            const csv = await fetchMercadoPagoRaw(
-              `/v1/account/release_report/${report.file_name}`,
-              config.accessToken,
-            );
-
-            // Parse transactions (limited)
-            const transactions: Transaction[] = [];
-            let count = 0;
-
-            for (const row of parseCSVStream(csv)) {
-              if (count >= limit) break;
-
-              transactions.push({
-                id: row.SOURCE_ID || row.EXTERNAL_REFERENCE || `tx-${count}`,
-                date: row.DATE || "",
-                type: row.RECORD_TYPE || row.TRANSACTION_TYPE || "",
-                description: row.DESCRIPTION || row.REFERENCE || "",
-                gross_amount: parseFloat(row.GROSS_AMOUNT || "0"),
-                net_amount: parseFloat(row.NET_CREDIT_AMOUNT || row.NET_DEBIT_AMOUNT || "0"),
-                fee_amount: parseFloat(row.FEE_AMOUNT || "0"),
-                currency: row.CURRENCY_ID || "BRL",
-              });
-              count++;
-            }
-
-            return {
-              content: [
-                {
-                  type: "text" as const,
-                  text:
-                    `Found ${transactions.length} transactions:\n` +
-                    transactions
-                      .map(
-                        (t) =>
-                          `  ${t.date} | ${t.type} | ${t.net_amount.toFixed(2)} | ${t.description.slice(0, 30)}`,
-                      )
-                      .join("\n"),
-                },
-              ],
-              structuredContent: { transactions, count: transactions.length },
-            };
-          } catch (error) {
-            if (error instanceof MercadoPagoApiError && error.status === 404) {
-              delay = Math.min(delay * 1.5, 30000);
-              continue;
-            }
-            throw error;
-          }
-        }
+        const totalAvailable = response.paging.total;
 
         return {
           content: [
             {
               type: "text" as const,
-              text: `Report generation timed out. Report ID: ${report.file_name}. Try again later.`,
+              text:
+                `Found ${transactions.length} transactions (${totalAvailable} total in period):\n` +
+                transactions
+                  .map(
+                    (t) =>
+                      `  ${t.date.split("T")[0]} | ${t.type} | ${t.currency} ${t.gross_amount.toFixed(2)} | ${(t.description ?? "").slice(0, 30)}`,
+                  )
+                  .join("\n"),
             },
           ],
           structuredContent: {
-            status: "timeout",
-            report_id: report.file_name,
-            hint: "Report is still processing. Try again in a few minutes.",
+            transactions,
+            count: transactions.length,
+            total_available: totalAvailable,
+            period: { start_date: startDate, end_date: endDate },
           },
         };
       } catch (error) {

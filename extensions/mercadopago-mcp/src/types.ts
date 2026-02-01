@@ -16,9 +16,15 @@ export const BalanceResponseSchema = z.object({
 });
 
 export const ReportResponseSchema = z.object({
-  id: z.number().optional(),
-  status: z.string().optional(),
-  file_name: z.string(),
+  id: z.number(),
+  status: z.string(),
+  file_name: z.string().optional(),
+  // Additional fields from actual API response
+  account_id: z.number().optional(),
+  user_id: z.number().optional(),
+  begin_date: z.string().optional(),
+  end_date: z.string().optional(),
+  report_type: z.string().optional(),
 });
 
 // Tool output schemas
