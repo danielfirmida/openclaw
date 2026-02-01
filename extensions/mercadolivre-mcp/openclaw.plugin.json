@@ -1,0 +1,25 @@
+{
+  "id": "mercadolivre-mcp",
+  "name": "Mercado Livre (Read-Only)",
+  "description": "Read-only access to Mercado Livre seller data for financial reporting (DRE, Balanco Patrimonial)",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "clientId": {
+        "type": "string",
+        "description": "Mercado Livre App ID"
+      },
+      "clientSecret": {
+        "type": "string",
+        "description": "Mercado Livre App Secret"
+      },
+      "redirectUri": {
+        "type": "string",
+        "description": "OAuth redirect URI (default: http://localhost:8888/callback)",
+        "default": "http://localhost:8888/callback"
+      }
+    },
+    "required": ["clientId", "clientSecret"]
+  }
+}
