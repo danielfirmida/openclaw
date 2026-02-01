@@ -81,9 +81,6 @@ jobs:
             task: build
             command: pnpm build
           - runtime: node
-            task: protocol
-            command: pnpm protocol:check
-          - runtime: node
             task: format
             command: pnpm format
           - runtime: bun
@@ -205,9 +202,6 @@ jobs:
           - runtime: node
             task: build
             command: pnpm build
-          - runtime: node
-            task: protocol
-            command: pnpm protocol:check
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -284,6 +278,8 @@ jobs:
         include:
           - task: test
             command: pnpm test
+          - task: protocol
+            command: pnpm protocol:check
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -322,6 +318,9 @@ jobs:
             sleep $((attempt * 10))
           done
           exit 1
+
+      - name: Install SwiftFormat
+        run: brew install swiftformat
 
       - name: Runtime versions
         run: |
