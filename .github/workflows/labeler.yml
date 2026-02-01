@@ -10,6 +10,7 @@ permissions:
 
 jobs:
   label:
+    # Fallback to GITHUB_TOKEN when the GH app key is not configured.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/create-github-app-token@v1
