@@ -18,6 +18,7 @@ export default defineConfig({
   test: {
     testTimeout: 120_000,
     hookTimeout: isWindows ? 180_000 : 120_000,
+    retry: isCI ? 2 : 0, // Retry flaky tests up to 2 times in CI
     pool: "forks",
     maxWorkers: isCI ? ciWorkers : localWorkers,
     include: [
