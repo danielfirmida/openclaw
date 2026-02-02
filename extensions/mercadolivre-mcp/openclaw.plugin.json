@@ -6,20 +6,23 @@
     "type": "object",
     "additionalProperties": false,
     "properties": {
+      "accessToken": {
+        "type": "string",
+        "description": "Mercado Livre API access token (alternative to OAuth flow)"
+      },
       "clientId": {
         "type": "string",
-        "description": "Mercado Livre App ID"
+        "description": "Mercado Livre App ID (for OAuth flow)"
       },
       "clientSecret": {
         "type": "string",
-        "description": "Mercado Livre App Secret"
+        "description": "Mercado Livre App Secret (for OAuth flow)"
       },
       "redirectUri": {
         "type": "string",
         "description": "OAuth redirect URI (default: http://localhost:8888/callback)",
         "default": "http://localhost:8888/callback"
       }
-    },
-    "required": ["clientId", "clientSecret"]
+    }
   }
 }

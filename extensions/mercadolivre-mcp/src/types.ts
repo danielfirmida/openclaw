@@ -1,11 +1,19 @@
 import { z } from "zod";
 
-// Plugin configuration
-export const MercadoLivreConfigSchema = z.object({
-  clientId: z.string().min(1),
-  clientSecret: z.string().min(1),
-  redirectUri: z.string().default("http://localhost:8888/callback"),
-});
+// Plugin configuration - supports either OAuth flow or direct access token
+export const MercadoLivreConfigSchema = z
+  .object({
+    // Option 1: Direct access token (like MercadoPago)
+    accessToken: z.string().min(1).optional(),
+    // Option 2: OAuth flow with client credentials
+    clientId: z.string().min(1).optional(),
+    clientSecret: z.string().min(1).optional(),
+    redirectUri: z.string().default("http://localhost:8888/callback"),
+  })
+  .refine(
+    (data) => data.accessToken || (data.clientId && data.clientSecret),
+    "Either accessToken or both clientId and clientSecret are required",
+  );
 
 export type MercadoLivreConfig = z.infer<typeof MercadoLivreConfigSchema>;
 

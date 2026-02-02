@@ -16,13 +16,43 @@ export default function register(api: OpenClawPluginApi) {
   }
 
   const config = configResult.data;
-  const tokenManager = createTokenManager(config);
 
-  // Track user ID after authentication (set during OAuth flow)
+  // Track user ID (set during OAuth flow or fetched from API for direct token)
   let userId: number | null = null;
 
   // Helper to get user ID
   const getUserId = () => userId;
+
+  // Mode 1: Direct access token (like MercadoPago)
+  if (config.accessToken) {
+    // Simple token getter that returns the static token
+    const getToken = async () => config.accessToken!;
+
+    // Extract user ID from access token format: APP_USR-{app_id}-{date}-{hash}-{user_id}
+    const tokenParts = config.accessToken.split("-");
+    if (tokenParts.length >= 5) {
+      const parsedUserId = parseInt(tokenParts[tokenParts.length - 1], 10);
+      if (!isNaN(parsedUserId)) {
+        userId = parsedUserId;
+      }
+    }
+
+    // Register read-only tools with direct token
+    api.registerTool(createGetUserInfoTool(getToken), { optional: true });
+    api.registerTool(createListOrdersTool(getToken, getUserId), { optional: true });
+    api.registerTool(createListItemsTool(getToken, getUserId), { optional: true });
+    api.registerTool(createGetBillingTool(getToken, getUserId), { optional: true });
+
+    return;
+  }
+
+  // Mode 2: OAuth flow with client credentials
+  if (!config.clientId || !config.clientSecret) {
+    // Neither mode configured - skip
+    return;
+  }
+
+  const tokenManager = createTokenManager(config);
 
   // Register OAuth provider for authentication
   api.registerProvider({
@@ -107,8 +137,7 @@ export default function register(api: OpenClawPluginApi) {
     ],
   });
 
-  // Register read-only tools
-  // Note: userId is already captured during OAuth flow (line 85), so no need to re-extract
+  // Register read-only tools with OAuth token manager
   api.registerTool(createGetUserInfoTool(tokenManager.getToken.bind(tokenManager)), {
     optional: true,
   });
